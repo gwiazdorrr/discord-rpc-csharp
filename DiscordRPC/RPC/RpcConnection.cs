@@ -684,12 +684,20 @@ namespace DiscordRPC.RPC
 			}
 
 			//Send it off to the server
-			Logger.Trace("Sending Handshake...");				
-			if (!namedPipe.WriteFrame(new PipeFrame(Opcode.Handshake, new Handshake() { Version = VERSION, ClientID = applicationID })))
-			{
-				Logger.Error("Failed to write a handshake.");
-				return;
-			}
+			Logger.Trace("Sending Handshake...");
+            try
+            {
+                if (!namedPipe.WriteFrame(new PipeFrame(Opcode.Handshake, new Handshake() { Version = VERSION, ClientID = applicationID })))
+                {
+                    Logger.Error("Failed to write a handshake.");
+                    return;
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Logger.Error("Failed to write a handshake: {0}", ex);
+                return;
+            }
 
 			//This has to be done outside the lock
 			SetConnectionState(RpcState.Connecting);
