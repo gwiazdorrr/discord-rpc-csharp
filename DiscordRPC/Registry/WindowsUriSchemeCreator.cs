@@ -83,7 +83,7 @@ namespace DiscordRPC.Registry
             using (var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey("Software\\Valve\\Steam"))
             {
                 if (key == null) return null;
-                return key.GetValue("SteamExe") as string;
+                return (key.GetValue("SteamExe") as string)?.Replace('/', '\\');
             }
         }
 #endif
