@@ -7,11 +7,14 @@ using System.Text;
 namespace DiscordRPC.IO
 {
 	internal class Handshake
-	{       
-		/// <summary>
-		/// Version of the IPC API we are using
-		/// </summary>
-		[JsonProperty("v")]
+	{
+        [JsonConstructor]
+        public Handshake() { }
+
+        /// <summary>
+        /// Version of the IPC API we are using
+        /// </summary>
+        [JsonProperty("v")]
 		public int Version { get; set; }
 
 		/// <summary>

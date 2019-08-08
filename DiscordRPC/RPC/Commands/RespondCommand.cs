@@ -9,10 +9,13 @@ namespace DiscordRPC.RPC.Commands
 {
     internal class RespondCommand : ICommand
 	{
-		/// <summary>
-		/// The user ID that we are accepting / rejecting
-		/// </summary>
-		[JsonProperty("user_id")]
+        [JsonConstructor]
+        public RespondCommand() { }
+
+        /// <summary>
+        /// The user ID that we are accepting / rejecting
+        /// </summary>
+        [JsonProperty("user_id")]
 		public string UserID { get; set; }
 
 		/// <summary>

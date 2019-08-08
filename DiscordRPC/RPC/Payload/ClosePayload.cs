@@ -8,6 +8,9 @@ namespace DiscordRPC.RPC.Payload
 {
 	internal class ClosePayload : IPayload
 	{
+        [JsonConstructor]
+        public ClosePayload() { }
+
 		/// <summary>
 		/// The close code the discord gave us
 		/// </summary>

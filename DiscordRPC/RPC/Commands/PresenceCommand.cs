@@ -9,10 +9,13 @@ namespace DiscordRPC.RPC.Commands
 {
 	internal class PresenceCommand : ICommand
 	{
-		/// <summary>
-		/// The process ID
-		/// </summary>
-		[JsonProperty("pid")]
+        [JsonConstructor]
+        public PresenceCommand() { }
+
+        /// <summary>
+        /// The process ID
+        /// </summary>
+        [JsonProperty("pid")]
 		public int PID { get; set; }
 
 		/// <summary>

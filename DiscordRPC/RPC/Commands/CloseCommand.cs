@@ -9,10 +9,13 @@ namespace DiscordRPC.RPC.Commands
 {
 	internal class CloseCommand : ICommand
 	{
-		/// <summary>
-		/// The process ID
-		/// </summary>
-		[JsonProperty("pid")]
+        [JsonConstructor]
+        public CloseCommand() {}
+
+        /// <summary>
+        /// The process ID
+        /// </summary>
+        [JsonProperty("pid")]
 		public int PID { get; set; }
 
 		/// <summary>

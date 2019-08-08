@@ -17,8 +17,8 @@ namespace DiscordRPC.RPC.Payload
 		/// </summary>
 		[JsonProperty("args", NullValueHandling = NullValueHandling.Ignore)]
 		public JObject Arguments { get; set; }
-		
-		public ArgumentPayload() : base() { Arguments = null; }
+
+        public ArgumentPayload() : base() { Arguments = null; }
 		public ArgumentPayload(long nonce) : base(nonce) { Arguments = null; }
 		public ArgumentPayload(object args, long nonce) : base(nonce)
 		{

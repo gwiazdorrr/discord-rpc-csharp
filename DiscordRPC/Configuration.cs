@@ -11,10 +11,13 @@ namespace DiscordRPC
 	/// </summary>
 	public class Configuration
 	{
-		/// <summary>
-		/// The Discord API endpoint that should be used.
-		/// </summary>
-		[JsonProperty("api_endpoint")]
+        [JsonConstructor]
+        public Configuration() { }
+
+        /// <summary>
+        /// The Discord API endpoint that should be used.
+        /// </summary>
+        [JsonProperty("api_endpoint")]
 		public string ApiEndpoint { get; set; }
 
 		/// <summary>
