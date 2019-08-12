@@ -6,6 +6,7 @@ using Lachee.IO;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
+using System.Collections.Generic;
 
 namespace DiscordRPC.Unity
 {
@@ -18,6 +19,7 @@ namespace DiscordRPC.Unity
 
         private NamedPipeClientStream _stream;
         private byte[] _buffer = new byte[PipeFrame.MAX_SIZE];
+        private Queue<PipeFrame> _pendingReadFrames = new Queue<PipeFrame>();
 
         public ILogger Logger { get; set; }
         public bool IsConnected {  get { return _stream != null && _stream.IsConnected; } }
@@ -130,6 +132,12 @@ namespace DiscordRPC.Unity
                 return false;
             }
 
+            if ( _pendingReadFrames.Count > 0 )
+            {
+                frame = _pendingReadFrames.Dequeue();
+                return true;
+            }
+
             //Try and read a frame
             int length = _stream.Read(_buffer, 0, _buffer.Length);
             Logger.Trace("Read {0} bytes", length);
@@ -152,7 +160,22 @@ namespace DiscordRPC.Unity
                 else
                 {
                     Logger.Trace("Read pipe frame!");
-                    return true;
+                    while ( memory.Position < length )
+                    {
+                        Logger.Trace("There are still {0} bytes to read, try to read and enqueue another frame", length - memory.Position);
+                        var pendingFrame = new PipeFrame();
+                        if ( pendingFrame.ReadStream(memory) )
+                        {
+                            Logger.Trace("Read pending pipe frame!");
+                            _pendingReadFrames.Enqueue(pendingFrame);
+                        }
+                        else
+                        {
+                            Logger.Error("Failed to read a pending frame! {0}", pendingFrame.Opcode);
+                        }
+                    }
+
+                    return true; // or false?
                 }
             }
         }

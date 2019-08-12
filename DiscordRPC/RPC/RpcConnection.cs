@@ -290,7 +290,13 @@ namespace DiscordRPC.RPC
 						EnqueueMessage(new ConnectionEstablishedMessage() { ConnectedPipe = namedPipe.ConnectedPipe });
 
 						//Attempt to establish a handshake
-						EstablishHandshake();
+						if (!EstablishHandshake())
+						{
+							Logger.Error("Handshake error, aborting");
+							aborting = true;
+							return;
+						}
+
 						Logger.Trace("Connection Established. Starting reading loop...");
 
 						//Continously iterate, waiting for the frame
@@ -669,7 +675,7 @@ namespace DiscordRPC.RPC
 		/// Establishes the handshake with the server. 
 		/// </summary>
 		/// <returns></returns>
-		private void EstablishHandshake()
+		private bool EstablishHandshake()
 		{
 			Logger.Trace("Attempting to establish a handshake...");
 
@@ -680,27 +686,28 @@ namespace DiscordRPC.RPC
 			if (State != RpcState.Disconnected)
 			{
 				Logger.Error("State must be disconnected in order to start a handshake!");
-				return;
+				return false;
 			}
 
 			//Send it off to the server
 			Logger.Trace("Sending Handshake...");
-            try
-            {
-                if (!namedPipe.WriteFrame(new PipeFrame(Opcode.Handshake, new Handshake() { Version = VERSION, ClientID = applicationID })))
-                {
-                    Logger.Error("Failed to write a handshake.");
-                    return;
-                }
-            }
-            catch (System.Exception ex)
-            {
-                Logger.Error("Failed to write a handshake: {0}", ex);
-                return;
-            }
+			try
+			{
+				if (!namedPipe.WriteFrame(new PipeFrame(Opcode.Handshake, new Handshake() { Version = VERSION, ClientID = applicationID })))
+				{
+					Logger.Error("Failed to write a handshake.");
+					return false;
+				}
+			}
+			catch (System.Exception ex)
+			{
+				Logger.Error("Failed to write a handshake: {0}", ex);
+				return false;
+			}
 
 			//This has to be done outside the lock
 			SetConnectionState(RpcState.Connecting);
+			return true;
 		}
 
 		/// <summary>
