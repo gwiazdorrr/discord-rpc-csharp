@@ -37,9 +37,9 @@ namespace DiscordRPC.IO
 		/// <summary>
 		/// Reads a frame if there is one available. Returns false if there is none. This should be non blocking (aka use a Peek first).
 		/// </summary>
-		/// <param name="frame">The frame that has been read. Will be <code>default(PipeFrame)</code> if it fails to read</param>
+		/// <param name="frames">Frames that has been read. Will be empty if it fails to read</param>
 		/// <returns>Returns true if a frame has been read, otherwise false.</returns>
-		bool ReadFrame(out PipeFrame frame);
+        bool ReadFrames(List<PipeFrame> frames);
 
 		/// <summary>
 		/// Writes the frame to the pipe. Returns false if any errors occur.

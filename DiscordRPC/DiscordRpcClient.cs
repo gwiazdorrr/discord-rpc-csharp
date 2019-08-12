@@ -289,6 +289,7 @@ namespace DiscordRPC
         /// <param name="message"></param>
 		private void ProcessMessage(IMessage message)
         {
+            Logger.Trace("Processing message: {0}", message?.GetType());
             if (message == null) return;
             switch (message.Type)
 			{

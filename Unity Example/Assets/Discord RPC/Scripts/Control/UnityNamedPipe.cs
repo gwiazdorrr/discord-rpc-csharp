@@ -6,6 +6,7 @@ using Lachee.IO;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
+using System.Collections.Generic;
 
 namespace DiscordRPC.Unity
 {
@@ -18,6 +19,7 @@ namespace DiscordRPC.Unity
 
         private NamedPipeClientStream _stream;
         private byte[] _buffer = new byte[PipeFrame.MAX_SIZE];
+        private List<PipeFrame> _pendingReadFrames = new List<PipeFrame>();
 
         public ILogger Logger { get; set; }
         public bool IsConnected {  get { return _stream != null && _stream.IsConnected; } }
@@ -118,7 +120,7 @@ namespace DiscordRPC.Unity
             Close();
         }
 
-        public bool ReadFrame(out PipeFrame frame)
+        public bool ReadFrames(List<PipeFrame> frames)
         {
             if (_isDisposed)
                 throw new ObjectDisposedException("_stream");
@@ -126,7 +128,6 @@ namespace DiscordRPC.Unity
             //We are not connected so we cannot read!
             if (!IsConnected)
             {
-                frame = default(PipeFrame);
                 return false;
             }
 
@@ -136,24 +137,29 @@ namespace DiscordRPC.Unity
 
             if (length == 0)
             {
-                frame = default(PipeFrame);
                 return false;
             }
+
+            bool frameRead = false;
 
             //Read the stream now
             using (MemoryStream memory = new MemoryStream(_buffer, 0, length))
             {
-                frame = new PipeFrame();
-                if (!frame.ReadStream(memory))
+                var frame = new PipeFrame();
+                while ( memory.Position < length )
                 {
-                    Logger.Error("Failed to read a frame! {0}", frame.Opcode);
-                    return false;
+                    if (!frame.ReadStream(memory))
+                    {
+                        Logger.Error("Failed to read a frame! {0}", frame.Opcode);
+                        break;
+                    }
+
+                    Logger.Trace("Read pipe frame!, bytes left: {0}", length - memory.Position);
+                    frames.Add(frame);
+                    frameRead = true;
                 }
-                else
-                {
-                    Logger.Trace("Read pipe frame!");
-                    return true;
-                }
+
+                return frameRead;
             }
         }
 

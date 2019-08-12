@@ -278,9 +278,9 @@ namespace DiscordRPC.IO
         /// <summary>
         /// Reads a frame, returning false if none are available
         /// </summary>
-        /// <param name="frame"></param>
+        /// <param name="frames"></param>
         /// <returns></returns>
-        public bool ReadFrame(out PipeFrame frame)
+        public bool ReadFrames(List<PipeFrame> frames)
         {
             if (_isDisposed)
                 throw new ObjectDisposedException("_stream");
@@ -291,12 +291,15 @@ namespace DiscordRPC.IO
                 if (_framequeue.Count == 0)
                 {
                     //We found nothing, so just default and return null
-                    frame = default(PipeFrame);
                     return false;
                 }
 
                 //Return the dequed frame
-                frame = _framequeue.Dequeue();
+                while (_framequeue.Count > 0)
+                {
+                    frames.Add(_framequeue.Dequeue());
+                }
+
                 return true;
             }
         }

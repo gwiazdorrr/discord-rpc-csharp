@@ -265,6 +265,8 @@ namespace DiscordRPC.RPC
 			//initialize the pipe
 			Logger.Trace("Initializing Thread. Creating pipe object.");
 
+            List<PipeFrame> frames = new List<PipeFrame>(1);
+
 			//Forever trying to connect unless the abort signal is sent
 			//Keep Alive Loop
 			while (!aborting && !shutdown)
@@ -290,85 +292,96 @@ namespace DiscordRPC.RPC
 						EnqueueMessage(new ConnectionEstablishedMessage() { ConnectedPipe = namedPipe.ConnectedPipe });
 
 						//Attempt to establish a handshake
-						EstablishHandshake();
+						if (!EstablishHandshake())
+						{
+							Logger.Error("EstablishHandshake failed, aborting");
+							aborting = true;
+							return;
+						}
+
 						Logger.Trace("Connection Established. Starting reading loop...");
 
 						//Continously iterate, waiting for the frame
 						//We want to only stop reading if the inside tells us (mainloop), if we are aborting (abort) or the pipe disconnects
 						// We dont want to exit on a shutdown, as we still have information
-						PipeFrame frame;
 						bool mainloop = true;
 						while (mainloop && !aborting && !shutdown && namedPipe.IsConnected)
 						{
 							#region Read Loop
 
 							//Iterate over every frame we have queued up, processing its contents
-							if (namedPipe.ReadFrame(out frame))
+							frames.Clear();
+
+							if (namedPipe.ReadFrames(frames))
 							{
-								#region Read Payload
-								Logger.Trace("Read Payload: {0}", frame.Opcode);
-
-								//Do some basic processing on the frame
-								switch (frame.Opcode)
+								foreach (var frame in frames)
 								{
-									//We have been told by discord to close, so we will consider it an abort
-									case Opcode.Close:
+									#region Read Payload
+									Logger.Trace("Read Payload: {0}", frame.Message);
 
-										ClosePayload close = frame.GetObject<ClosePayload>();
-										Logger.Warning("We have been told to terminate by discord: ({0}) {1}", close.Code, close.Reason);
-										EnqueueMessage(new CloseMessage() { Code = close.Code, Reason = close.Reason });
-										mainloop = false;
-										break;
+									//Do some basic processing on the frame
+									switch (frame.Opcode)
+									{
+										//We have been told by discord to close, so we will consider it an abort
+										case Opcode.Close:
 
-									//We have pinged, so we will flip it and respond back with pong
-									case Opcode.Ping:					
-										Logger.Trace("PING");
-										frame.Opcode = Opcode.Pong;
-										namedPipe.WriteFrame(frame);
-										break;
-
-									//We have ponged? I have no idea if Discord actually sends ping/pongs.
-									case Opcode.Pong:															
-										Logger.Trace("PONG");
-										break;
-
-									//A frame has been sent, we should deal with that
-									case Opcode.Frame:					
-										if (shutdown)
-										{
-											//We are shutting down, so skip it
-											Logger.Warning("Skipping frame because we are shutting down.");
+											ClosePayload close = frame.GetObject<ClosePayload>();
+											Logger.Warning("We have been told to terminate by discord: ({0}) {1}", close.Code, close.Reason);
+											EnqueueMessage(new CloseMessage() { Code = close.Code, Reason = close.Reason });
+											mainloop = false;
 											break;
-										}
 
-										if (frame.Data == null)
-										{
-											//We have invalid data, thats not good.
-											Logger.Error("We received no data from the frame so we cannot get the event payload!");
+										//We have pinged, so we will flip it and respond back with pong
+										case Opcode.Ping:
+											Logger.Trace("PING");
+											var responseFrame = frame;
+											responseFrame.Opcode = Opcode.Pong;
+											namedPipe.WriteFrame(responseFrame);
 											break;
-										}
 
-										//We have a frame, so we are going to process the payload and add it to the stack
-										EventPayload response = null;
-										try { response = frame.GetObject<EventPayload>(); } catch (Exception e)
-										{
-											Logger.Error("Failed to parse event! " + e.Message);
-											Logger.Error("Data: " + frame.Message);
-										}
+										//We have ponged? I have no idea if Discord actually sends ping/pongs.
+										case Opcode.Pong:
+											Logger.Trace("PONG");
+											break;
 
-										if (response != null) ProcessFrame(response);
-										break;
-										
+										//A frame has been sent, we should deal with that
+										case Opcode.Frame:
+											if (shutdown)
+											{
+												//We are shutting down, so skip it
+												Logger.Warning("Skipping frame because we are shutting down.");
+												break;
+											}
 
-									default:
-									case Opcode.Handshake:
-										//We have a invalid opcode, better terminate to be safe
-										Logger.Error("Invalid opcode: {0}", frame.Opcode);
-										mainloop = false;
-										break;
+											if (frame.Data == null)
+											{
+												//We have invalid data, thats not good.
+												Logger.Error("We received no data from the frame so we cannot get the event payload!");
+												break;
+											}
+
+											//We have a frame, so we are going to process the payload and add it to the stack
+											EventPayload response = null;
+											try { response = frame.GetObject<EventPayload>(); }
+											catch (Exception e)
+											{
+												Logger.Error("Failed to parse event! " + e.Message);
+												Logger.Error("Data: " + frame.Message);
+											}
+
+											if (response != null) ProcessFrame(response);
+											break;
+
+
+										default:
+										case Opcode.Handshake:
+											//We have a invalid opcode, better terminate to be safe
+											Logger.Error("Invalid opcode: {0}", frame.Opcode);
+											mainloop = false;
+											break;
+									}
+									#endregion
 								}
-
-								#endregion
 							}
 
 							if (!aborting && namedPipe.IsConnected)
@@ -669,7 +682,7 @@ namespace DiscordRPC.RPC
 		/// Establishes the handshake with the server. 
 		/// </summary>
 		/// <returns></returns>
-		private void EstablishHandshake()
+		private bool EstablishHandshake()
 		{
 			Logger.Trace("Attempting to establish a handshake...");
 
@@ -680,7 +693,7 @@ namespace DiscordRPC.RPC
 			if (State != RpcState.Disconnected)
 			{
 				Logger.Error("State must be disconnected in order to start a handshake!");
-				return;
+                return false;
 			}
 
 			//Send it off to the server
@@ -690,17 +703,18 @@ namespace DiscordRPC.RPC
                 if (!namedPipe.WriteFrame(new PipeFrame(Opcode.Handshake, new Handshake() { Version = VERSION, ClientID = applicationID })))
                 {
                     Logger.Error("Failed to write a handshake.");
-                    return;
+                    return false;
                 }
             }
             catch (System.Exception ex)
             {
                 Logger.Error("Failed to write a handshake: {0}", ex);
-                return;
+                return false;
             }
 
 			//This has to be done outside the lock
 			SetConnectionState(RpcState.Connecting);
+            return true;
 		}
 
 		/// <summary>
