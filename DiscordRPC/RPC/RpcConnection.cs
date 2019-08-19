@@ -293,104 +293,105 @@ namespace DiscordRPC.RPC
 						if (!EstablishHandshake())
 						{
 							Logger.Error("Handshake error, aborting");
-							aborting = true;
-							return;
+							EnqueueMessage(new ConnectionFailedMessage() { FailedPipe = targetPipe });
 						}
-
-						Logger.Trace("Connection Established. Starting reading loop...");
-
-						//Continously iterate, waiting for the frame
-						//We want to only stop reading if the inside tells us (mainloop), if we are aborting (abort) or the pipe disconnects
-						// We dont want to exit on a shutdown, as we still have information
-						PipeFrame frame;
-						bool mainloop = true;
-						while (mainloop && !aborting && !shutdown && namedPipe.IsConnected)
+						else
 						{
-							#region Read Loop
+							Logger.Trace("Connection Established. Starting reading loop...");
 
-							//Iterate over every frame we have queued up, processing its contents
-							if (namedPipe.ReadFrame(out frame))
+							//Continously iterate, waiting for the frame
+							//We want to only stop reading if the inside tells us (mainloop), if we are aborting (abort) or the pipe disconnects
+							// We dont want to exit on a shutdown, as we still have information
+							PipeFrame frame;
+							bool mainloop = true;
+							while (mainloop && !aborting && !shutdown && namedPipe.IsConnected)
 							{
-								#region Read Payload
-								Logger.Trace("Read Payload: {0}", frame.Opcode);
+								#region Read Loop
 
-								//Do some basic processing on the frame
-								switch (frame.Opcode)
+								//Iterate over every frame we have queued up, processing its contents
+								if (namedPipe.ReadFrame(out frame))
 								{
-									//We have been told by discord to close, so we will consider it an abort
-									case Opcode.Close:
+									#region Read Payload
+									Logger.Trace("Read Payload: {0}", frame.Opcode);
 
-										ClosePayload close = frame.GetObject<ClosePayload>();
-										Logger.Warning("We have been told to terminate by discord: ({0}) {1}", close.Code, close.Reason);
-										EnqueueMessage(new CloseMessage() { Code = close.Code, Reason = close.Reason });
-										mainloop = false;
-										break;
+									//Do some basic processing on the frame
+									switch (frame.Opcode)
+									{
+										//We have been told by discord to close, so we will consider it an abort
+										case Opcode.Close:
 
-									//We have pinged, so we will flip it and respond back with pong
-									case Opcode.Ping:					
-										Logger.Trace("PING");
-										frame.Opcode = Opcode.Pong;
-										namedPipe.WriteFrame(frame);
-										break;
-
-									//We have ponged? I have no idea if Discord actually sends ping/pongs.
-									case Opcode.Pong:															
-										Logger.Trace("PONG");
-										break;
-
-									//A frame has been sent, we should deal with that
-									case Opcode.Frame:					
-										if (shutdown)
-										{
-											//We are shutting down, so skip it
-											Logger.Warning("Skipping frame because we are shutting down.");
+											ClosePayload close = frame.GetObject<ClosePayload>();
+											Logger.Warning("We have been told to terminate by discord: ({0}) {1}", close.Code, close.Reason);
+											EnqueueMessage(new CloseMessage() { Code = close.Code, Reason = close.Reason });
+											mainloop = false;
 											break;
-										}
 
-										if (frame.Data == null)
-										{
-											//We have invalid data, thats not good.
-											Logger.Error("We received no data from the frame so we cannot get the event payload!");
+										//We have pinged, so we will flip it and respond back with pong
+										case Opcode.Ping:
+											Logger.Trace("PING");
+											frame.Opcode = Opcode.Pong;
+											namedPipe.WriteFrame(frame);
 											break;
-										}
 
-										//We have a frame, so we are going to process the payload and add it to the stack
-										EventPayload response = null;
-										try { response = frame.GetObject<EventPayload>(); } catch (Exception e)
-										{
-											Logger.Error("Failed to parse event! " + e.Message);
-											Logger.Error("Data: " + frame.Message);
-										}
+										//We have ponged? I have no idea if Discord actually sends ping/pongs.
+										case Opcode.Pong:
+											Logger.Trace("PONG");
+											break;
 
-										if (response != null) ProcessFrame(response);
-										break;
-										
+										//A frame has been sent, we should deal with that
+										case Opcode.Frame:
+											if (shutdown)
+											{
+												//We are shutting down, so skip it
+												Logger.Warning("Skipping frame because we are shutting down.");
+												break;
+											}
 
-									default:
-									case Opcode.Handshake:
-										//We have a invalid opcode, better terminate to be safe
-										Logger.Error("Invalid opcode: {0}", frame.Opcode);
-										mainloop = false;
-										break;
+											if (frame.Data == null)
+											{
+												//We have invalid data, thats not good.
+												Logger.Error("We received no data from the frame so we cannot get the event payload!");
+												break;
+											}
+
+											//We have a frame, so we are going to process the payload and add it to the stack
+											EventPayload response = null;
+											try { response = frame.GetObject<EventPayload>(); } catch (Exception e)
+											{
+												Logger.Error("Failed to parse event! " + e.Message);
+												Logger.Error("Data: " + frame.Message);
+											}
+
+											if (response != null) ProcessFrame(response);
+											break;
+
+
+										default:
+										case Opcode.Handshake:
+											//We have a invalid opcode, better terminate to be safe
+											Logger.Error("Invalid opcode: {0}", frame.Opcode);
+											mainloop = false;
+											break;
+									}
+
+									#endregion
+								}
+
+								if (!aborting && namedPipe.IsConnected)
+								{
+									//Process the entire command queue we have left
+									ProcessCommandQueue();
+
+									//Wait for some time, or until a command has been queued up
+									queueUpdatedEvent.WaitOne(POLL_RATE);
 								}
 
 								#endregion
 							}
-
-							if (!aborting && namedPipe.IsConnected)
-							{ 
-								//Process the entire command queue we have left
-								ProcessCommandQueue();
-
-								//Wait for some time, or until a command has been queued up
-								queueUpdatedEvent.WaitOne(POLL_RATE);
-							}
-
 							#endregion
-						}
-						#endregion
 
-						Logger.Trace("Left main read loop for some reason. Aborting: {0}, Shutting Down: {1}", aborting, shutdown);
+							Logger.Trace("Left main read loop for some reason. Aborting: {0}, Shutting Down: {1}", aborting, shutdown);
+						}
 					}
 					else
 					{
